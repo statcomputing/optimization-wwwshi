@@ -1,0 +1,327 @@
+---
+title: "Homework Assignment 2"
+# subtitle: "possible subtitle goes here"
+author:
+  - Wei Shi
+# date: "`r format(Sys.time(), '%d %B %Y')`"
+documentclass: article
+papersize: letter
+fontsize: 11pt
+# bibliography: template.bib
+# biblio-style: datalab
+
+output:
+  bookdown::pdf_document2
+  bookdown::html_document2
+---
+
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+## some utility functions, see the source code for details
+source("utils_template.R")
+
+## specify the packages needed
+pkgs <- c("splines2", "DT", "webshot", "leaflet")
+need.packages(pkgs)
+
+## external data can be read in by regular functions,
+## such as read.table or load
+
+## get output format in case something needs extra effort
+outFormat <- knitr::opts_knit$get("rmarkdown.pandoc.to")
+## "latex" or "html"
+
+## for latex and html output
+isHtml <- identical(outFormat, "html")
+isLatex <- identical(outFormat, "latex")
+latex <- ifelse(isLatex, '\\LaTeX\\', 'LaTeX')
+
+## specify global chunk options
+knitr::opts_chunk$set(fig.width = 5, fig.height = 4, dpi = 300,
+                      out.width = "90%", fig.align = "center")
+
+options(digits = 4)
+
+```
+
+
+# Problem 1
+
+## (a)
+
+\begin{align}
+\ell(\theta) & = \ln \left\{ \prod_{i = 1}^{n} \frac{1}{\pi [1 + (\theta-x_i)^2]}\right\}
+= - \sum_{i = 1}^{n} \left\{\ln \pi + \ln [1 + (\theta- x_i)^2]\right\}
+= -n \ln \pi - \sum_{i = 1}^{n} \ln [1+ (\theta - x_i)^2]\\
+
+\ell'(\theta) & = -  \sum_{i = 1}^{n} \frac{\partial}{\partial \theta} \ln [1+ (\theta- x_i)^2]
+= -  \sum_{i=1}^{n} \frac{\frac{\partial}{\partial \theta} [1+ (\theta-x_i)^2]}{1+ (\theta-x_i)^2}
+= -2  \sum_{i=1}^{n} \frac{\theta-x_i}{1+ (\theta-x_i)^2}\\
+
+\ell''(\theta) & = -2  \sum_{i=1}^{n} \frac{\partial}{\partial \theta} \frac{\theta-x_i}{1+ (\theta-x_i)^2}
+= -2  \sum_{i=1}^{n} \frac{1+ (\theta-x_i)^2-2(\theta-x_i)^2}{[1+ (\theta-x_i)^2]^2}
+= -2  \sum_{i=1}^{n} \frac{1-(\theta-x_i)^2}{[1+ (\theta-x_i)^2]^2}\\
+
+I(\theta) & = n \int_{-\infty}^{\infty} \frac{\{p'(x)\}^2}{p(x)} dx
+= n \int_{-\infty}^{\infty} \frac{\left\{-\frac{2(x-\theta)}{\pi [1+(x-\theta)^2]^2}\right\}^2}
+{\frac{1}{\pi [1+(x-\theta)^2]}} dx
+= \frac{4n}{\pi} \int_{-\infty}^{\infty} \frac{(x-\theta)^2}{[1+(x-\theta)^2]^3} dx \text{ (let } y=x-\theta)\\
+& = \frac{4n}{\pi} \int_{-\infty}^{\infty} \frac{y^2}{1+y^3} dy = \frac{n}{2}
+\end{align}
+
+```{r warning = FALSE, message = FALSE}
+#calculate the above integration times 4/pi
+f <- function(y) {y^2 / (1 + y^2)^3}
+integrate(f, -Inf, Inf)$value * 4 / pi
+
+```
+
+## (b)
+
+(ref:loglike1) Log-likelihood function.
+
+```{r fig.cap = "(ref:loglike1)", warning = FALSE, message = FALSE}
+x1 <- c(1.77, -0.23, 2.76, 3.80, 3.47, 56.75, -1.34, 4.24, -2.44,
+      3.29, 3.71, -2.40, 4.53, -0.07, -1.05, -13.87, -2.53, -1.75)
+
+loglike1 <- function(theta){
+  sapply(theta, function(theta) {-length(x1) * log(pi) - sum(log(1 + (theta - x1)^2))})
+}
+
+curve(loglike1(theta), from = -2, to = 4, xname = "theta", ylab = "loglike(theta)")
+```
+From the above plot, we can see that the global maximum is attained around 3, 
+however there is a local maximum attained around -0.5 which is very closed to the global maximum.
+
+To maximize $\ell(\theta)$, Newton-Raphson method computes
+\begin{align}
+\theta_{t+1} = \theta_t - \frac{\ell'(\theta_t)}{\ell''(\theta_t)}
+\end{align}
+
+(ref:table1) MLE for $\theta$ using the Newton-Raphson method.
+
+```{r warning = FALSE, message = FALSE}
+NewtonRaphson <- function(start, g, gr.g, hess.g){
+  sapply(start, function(start) {nlminb(start = start, g, gr.g, hess.g)}[c(1, 4)])
+}
+
+start1 <- c(-11, -1, 0, 1.5, 4, 4.7, 7, 8, 38)
+
+nllh1 <- function(theta){ # negative log-likelihood
+  length(x1) * log(pi) + sum(log(1 + (theta - x1)^2))
+}
+
+gr.nllh1 <- function(theta){
+  2 * sum((theta - x1) / (1 + (theta - x1)^2))
+}
+
+hess.nllh1 <- function(theta){
+  as.matrix(2 * sum((1 - (theta - x1)^2) / (1 + (theta - x1)^2)^2))
+}
+
+table1 <- data.frame(NewtonRaphson(c(start1, mean(x1)), nllh1, gr.nllh1, hess.nllh1))
+colnames(table1) <- c(start1, paste("mean = ", round(mean(x1), digits = 4)))
+rownames(table1) <- c("MLE", "iterations")
+
+knitr::kable(table1, booktabs = TRUE, digits = 4, 
+             caption = '(ref:table1)')
+
+```
+
+From the above table, we can see that when starting from -1 and 0, 
+it stucks at the local maximum. All the other starting points 
+work well, Newton-Raphson method finds the correct MLE and the 
+minimal number of iterations is 4. By comparison, we can conclude 
+that the sample mean is a good starting point because it goes to 
+the correct MLE with minimal number of iterations.
+
+## (c)
+
+For fixed-point iterations, compute 
+\begin{align}
+\theta_{t+1} = \theta_t + \alpha\ell'(\theta_t)
+\end{align}
+
+(ref:table2) Fixed-point iterations when $\alpha$ = 1.
+
+(ref:table3) Fixed-point iterations when $\alpha$ = 0.64.
+
+(ref:table4) Fixed-point iterations when $\alpha$ = 0.25.
+
+```{r warning = FALSE, message = FALSE}
+FixedPoint <- function(start, g, gr.g, scale){
+  sapply(scale, function(alpha) {
+    NewtonRaphson(start, g, gr.g, function(theta) {as.matrix(1/alpha)})
+    })
+}
+
+scale <- c(1, 0.64, 0.25)
+
+result1 <- FixedPoint(start1, nllh1, gr.nllh1, scale)
+table2 <- vector("list", length(scale))
+for (i in 1:length(scale)){
+  table2[[i]] <- data.frame(matrix(result1[, i], nrow = 2))
+  colnames(table2[[i]]) <- start1
+  rownames(table2[[i]]) <- c("MLE", "iterations")
+}
+
+knitr::kable(table2[[1]], booktabs = TRUE, digits = 4, 
+             caption = '(ref:table2)')
+
+knitr::kable(table2[[2]], booktabs = TRUE, digits = 4, 
+             caption = '(ref:table2)')
+
+knitr::kable(table2[[3]], booktabs = TRUE, digits = 4, 
+             caption = '(ref:table2)')
+
+```
+
+From the above three tables, we can see that extreme starting 
+points such as -11, -1, 0, 8 and 38 are more likely to stuck 
+at local maximum.
+
+## (d)
+
+For Fisher scoring, compute
+\begin{align}
+\theta_{t+1} = \theta_t + \frac{\ell'(\theta_t)}{I(\theta_t)}
+\end{align}
+
+(ref:table5) Fisher scoring + Newton-Raphson method.
+
+```{r warning = FALSE, message = FALSE}
+FisherNewton <- function(start, g, gr.g, info, hess.g){
+  sapply(start, function(start){
+    fisher.result <- nlminb(start = start, g, gr.g, info)[c(1, 4)]
+    newton.result  <- nlminb(start = fisher.result[1], g, gr.g, hess.g)[c(1, 4)]
+    c(newton.result[1], fisher.result[2], newton.result[2])
+  })
+}
+
+info1 <- function(theta) {as.matrix(length(x1)/2)}
+
+table3 <- data.frame(FisherNewton(start1, nllh1, gr.nllh1, info1, hess.nllh1))
+colnames(table3) <- start1
+rownames(table3) <- c("MLE", "fisher iterations", "Netwon iterations")
+knitr::kable(table3, booktabs = TRUE, digits = 4, 
+             caption = '(ref:table5)')
+  
+```
+
+From above table, we can see that when starting from 
+-11, -1, 0 and 38, the algorithm stops at the local 
+maximum. And number of iterations for fisher scoring 
+are pretty high.
+
+## (e)
+
+Compare the results in (b), (c) and (d), finding the 
+MLE using Newton-Raphson method is preferable since it
+uses less number of iterations and is more stable with 
+different starting points. The main reason is that in 
+this problem, we can compute $\ell'(\theta)$ and 
+$\ell''(\theta)$ analytically.
+
+# Problem 2
+
+## (a)
+
+\begin{align}
+\ell(\theta)  = \ln \left\{ \prod_{i = 1}^{n} \frac{1-\cos(x_i - \theta)}{2\pi}\right\}
+= -n \ln (2\pi)  + \sum_{i = 1}^{n} \ln [1 - \cos(x_i - \theta)]
+\end{align}
+
+(ref:loglike2) Log-likelihood function.
+
+```{r fig.cap = "(ref:loglike2)"}
+x2 <- c(3.91, 4.85, 2.28, 4.06, 3.70, 4.04, 5.46, 3.53, 2.28, 1.96,
+       2.53, 3.88, 2.22, 3.47, 4.82, 2.46, 2.99, 2.54, 0.52)
+
+loglike2 <- function(theta){
+  sapply(theta, function(theta) {-length(x2) * log(2 * pi) + sum(log(1 - cos(x2 - theta)))})
+}
+
+curve(loglike2(theta), from = -pi, to = pi, xname = "theta", ylab = "loglike(theta)")
+
+```
+
+From above plot, we can see that the global maximum is attained around 0.
+
+## (b)
+
+\begin{align}
+ \mathbb{E}(X|\theta) & = \int_0^{2\pi} x p(x|\theta) dx 
+= \frac{1}{2\pi}\int_0^{2\pi} (x - x \cos(x - \theta)) dx \\
+& = \frac{1}{2\pi} \{\frac{1}{2}x^2 |_0^{2\pi} - [x\sin(x-\theta)|_0^{2\pi} + \cos(x-\theta)|_0^{2\pi}]\}
+= \pi + \sin(\theta) \\
+\Rightarrow  \hat{\theta}_{\text{moment}} & = \arcsin(\bar{x} - \pi)\\
+\end{align}
+
+```{r warning = FALSE, message = FALSE}
+theta.mom <- asin(mean(x2) - pi)
+theta.mom
+```
+
+
+## (c)
+
+\begin{align}
+\ell'(\theta) & = - \sum_{i=1}^n \frac{\sin(x_i - \theta)}{1 - \cos(x_i - \theta)}\\
+\ell''(\theta) & = - \sum_{i=1}^n \frac{1}{1 - \cos(x_i - \theta)}\\
+\end{align}
+
+(ref:table6) MLE for $\theta$ using the Newton-Raphson method with $\theta_0 = \hat{\theta}_{\text{moment}}$.
+
+```{r warning = FALSE, message = FALSE}
+nllh2 <- function(theta){ # negative log-likelihood
+  length(x2) * log(2 * pi) - sum(log(1 - cos(x2 - theta)))
+}
+
+gr.nllh2 <- function(theta){
+  sum(sin(x2 - theta) / (1 - cos(x2 - theta)))
+}
+
+hess.nllh2 <- function(theta){
+  as.matrix(sum(1  / (1 - cos(x2 - theta))))
+}
+
+table6 <- data.frame(NewtonRaphson(start = theta.mom, nllh2, gr.nllh2, hess.nllh2))
+colnames(table6) <- round(theta.mom, digits = 4)
+rownames(table6) <- c("MLE", "iterations")
+
+knitr::kable(table6, booktabs = TRUE, digits = 4, 
+             caption = '(ref:table6)')
+```
+
+
+## (d)
+
+(ref:table7) MLE for $\theta$ using the Newton-Raphson method.
+
+```{r warning = FALSE, message = FALSE}
+table7 <- data.frame(NewtonRaphson(start = c(-2.7, 2.7), nllh2, gr.nllh2, hess.nllh2))
+colnames(table7) <- c(-2.7, 2.7)
+rownames(table7) <- c("MLE", "iterations")
+
+knitr::kable(table7, booktabs = TRUE, digits = 4, 
+             caption = '(ref:table6)')
+
+```
+
+## (e)
+
+```{r warning = FALSE, message = FALSE}
+start2 <- seq(-pi, pi, length.out = 200)
+result2 <- as.numeric(NewtonRaphson(start = start2, nllh2, gr.nllh2, hess.nllh2)[1, ])
+table8 <- data.frame(cbind(round(result2, digits = 4), round(start2, digits = 4)))
+colnames(table8) <- c("outcome", "start")
+```
+
+
+# Problem 3
+
+## (a)
+
+## (b)
+
+## (c)
