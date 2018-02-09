@@ -169,10 +169,10 @@ knitr::kable(table2[[1]], booktabs = TRUE, digits = 4,
              caption = '(ref:table2)')
 
 knitr::kable(table2[[2]], booktabs = TRUE, digits = 4, 
-             caption = '(ref:table2)')
+             caption = '(ref:table3)')
 
 knitr::kable(table2[[3]], booktabs = TRUE, digits = 4, 
-             caption = '(ref:table2)')
+             caption = '(ref:table4)')
 
 ```
 
@@ -304,17 +304,26 @@ colnames(table7) <- c(-2.7, 2.7)
 rownames(table7) <- c("MLE", "iterations")
 
 knitr::kable(table7, booktabs = TRUE, digits = 4, 
-             caption = '(ref:table6)')
+             caption = '(ref:table7)')
 
 ```
 
 ## (e)
+
+(ref:table9) Sets of attraction.
 
 ```{r warning = FALSE, message = FALSE}
 start2 <- seq(-pi, pi, length.out = 200)
 result2 <- as.numeric(NewtonRaphson(start = start2, nllh2, gr.nllh2, hess.nllh2)[1, ])
 table8 <- data.frame(cbind(round(result2, digits = 4), round(start2, digits = 4)))
 colnames(table8) <- c("outcome", "start")
+sets <-sapply(unique(table8$outcome), function(x) {
+  as.character(table8$start[which(table8$outcome==x)])
+})
+table9 <- data.frame(cbind(unique(table8$outcome), sets))
+colnames(table9) <- c("unique outcome", "starting values")
+knitr::kable(table9, booktabs = TRUE, digits = 4, 
+             caption = '(ref:table9)')
 ```
 
 
@@ -322,6 +331,51 @@ colnames(table8) <- c("outcome", "start")
 
 ## (a)
 
+```{r warning = FALSE, message = FALSE}
+beetles <- data.frame(
+days = c(0, 8, 28, 41, 63, 69, 97, 117, 135, 154),
+beetles = c(2, 47, 192, 256, 768, 896, 1120, 896, 1184, 1024))
+
+N0 <- 2
+
+result3 <- nls(beetles ~ K * N0 / (N0 + (K - N0) * exp(-r * days)), 
+               data = beetles, start = list(K = 1200, r = 0.1))
+summary(result3)
+```
+
+
 ## (b)
 
+```{r warning = FALSE, message = FALSE}
+K <- seq(500, 1500, length.out = 100)
+r <- seq(0, 0.4, length.out = 100)
+sse <- function(K, r){
+  sapply(r, function(r) {
+    sapply(K, function(K){
+    sum((beetles$beetles - K * N0 / (N0 + (K - N0) * exp(-r * beetles$days)))^2)})})
+}
+contour(K, r, sse(K, r), 
+        main = "Contour plot of the sum of squared errors", 
+        xlab = "K", ylab = "r" )
+
+```
+
+
 ## (c)
+
+(ref:table10) MLE and variance of estimates using Nelder-Mead method.
+
+```{r warning = FALSE, message = FALSE}
+nloglike3 <- function(x){ # x = c(r, K, sigma)
+  length(beetles$beetles) * log(sqrt(2 * pi) * x[3]) +
+    1 / x[3]^2 * sum(log(beetles$beetles) - log(x[2] * N0 / (N0 + (x[2] - N0) * exp(-x[1] * beetles$days))))
+}
+
+mle <- optim(par = c(0.118, 1049.408, 1), fn = nloglike3)$par
+var <- diag(optimHess(par = c(0.118, 1049.408, 1), fn = nloglike3))
+table10 <- data.frame(rbind(mle, var))
+colnames(table10) <- c("r", "K", "sigma")
+knitr::kable(table10, booktabs = TRUE, digits = 4, 
+             caption = '(ref:table10)')
+```
+
